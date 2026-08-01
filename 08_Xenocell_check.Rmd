@@ -1,0 +1,331 @@
+---
+title: "Xengsort vs. CellRanger Multiplet Classification"
+author: "Mikhail Dozmorov"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+  pdf_document:
+    toc: no
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+## Overview
+
+This notebook evaluates how well **xengsort**-based read classification (see
+`README.md` for the full pipeline: raw FASTQs -> xengsort classify ->
+graft/host/ambiguous/neither-specific CellRanger runs) identifies multiplet
+droplets - barcodes whose reads come from both a human and a mouse cell -
+in PDX (patient-derived xenograft) scRNA-seq data, compared against
+CellRanger's own single-reference "barnyard" classification
+(`gem_classification.csv`, from a CellRanger run against a combined
+human+mouse reference).
+
+It compares barcode sets recovered from the species-specific CellRanger
+outputs (`_graft_multi`, `_host_multi`, `_ambiguous_multi`, `_neither_multi`)
+against CellRanger's per-barcode `call` column, using Euler/Venn diagrams,
+read-depth scatterplots, and basic count-matrix summaries.
+
+## Configuration
+
+```{r config}
+# EDIT these two values for your dataset before knitting.
+# base_dir  - project root containing a "data" subfolder with the
+#             CellRanger multi outputs produced by the xengsort pipeline
+# base_type - dataset identifier used to name those outputs, e.g.
+#             ${base_type}_multi, ${base_type}_graft_multi,
+#             ${base_type}_host_multi, ${base_type}_ambiguous_multi,
+#             ${base_type}_neither_multi (see README.md, steps 00-06)
+base_dir  <- "."
+base_type <- "hgmm_6k"
+```
+
+# Xengsort vs. CellRanger multiplet classification
+
+Two independent barcode classifications are compared here:
+
+- **Xengsort-based classification**: derived from the CellRanger outputs of
+  the xengsort-classified, separately-aligned graft (human-aligned) and host
+  (mouse-aligned) FASTQs. A barcode present only in the human-aligned matrix
+  is called `GRCh38`, only in the mouse-aligned matrix `GRCm39`, and a
+  barcode present in both is called `Multiplet`.
+- **CellRanger GEM classification**: CellRanger's own barnyard call
+  (`gem_classification.csv`), from a single CellRanger run against a
+  combined human+mouse reference.
+
+The code below loads the graft- and host-aligned filtered barcode matrices,
+builds the xengsort-based classification, saves it to
+`data/<base_type>_graft_multi/xengsort_classification.csv`, and compares it
+against CellRanger's GEM classification with proportional Euler diagrams for
+each of the three categories (`GRCh38`, `GRCm39`, `Multiplet`).
+
+```{r}
+# Load necessary libraries
+library(Seurat)
+library(tidyverse)
+library(eulerr)
+library(gridExtra)
+
+# --- 1. Data Loading ---
+path_human <- file.path(base_dir, "data", paste0(base_type, "_graft_multi"), "outs", "per_sample_outs", paste0(base_type, "_graft_multi"), "sample_filtered_feature_bc_matrix")
+path_mouse <- file.path(base_dir, "data", paste0(base_type, "_host_multi"), "outs", "per_sample_outs", paste0(base_type, "_host_multi"), "sample_filtered_feature_bc_matrix")
+
+data_human <- Read10X(data.dir = path_human)
+data_mouse <- Read10X(data.dir = path_mouse)
+
+bc_human <- colnames(data_human)
+bc_mouse <- colnames(data_mouse)
+
+# --- 2. Print Counts ---
+cat("Barcodes in Human-aligned:", length(bc_human), "\n")
+cat("Barcodes in Mouse-aligned:", length(bc_mouse), "\n")
+
+# --- 3. Xengsort Classification Logic ---
+grch38_only <- setdiff(bc_human, bc_mouse)
+grcm39_only <- setdiff(bc_mouse, bc_human)
+multiplets <- intersect(bc_human, bc_mouse)
+
+xengsort_classification <- data.frame(
+  barcode = c(grch38_only, grcm39_only, multiplets),
+  call = c(rep("GRCh38", length(grch38_only)),
+           rep("GRCm39", length(grcm39_only)),
+           rep("Multiplet", length(multiplets))),
+  stringsAsFactors = FALSE
+)
+
+write.csv(xengsort_classification, file.path(base_dir, "data", paste0(base_type, "_graft_multi"), "xengsort_classification.csv"), row.names = FALSE)
+
+# --- 4. Plotting with eulerr ---
+
+# Function to create a horizontal Euler/Venn plot
+plot_euler_horizontal <- function(set_list, title) {
+  # eulerr automatically calculates the intersections from a list
+  fit <- euler(set_list)
+  # quantities = TRUE shows the counts inside the circles
+  plot(fit, 
+       quantities = TRUE, 
+       fills = list(fill = c("#66D2D6", "#FBC740"), alpha = 0.6),
+       edges = "black",
+       main = title)
+}
+
+# Plot A: Alignment Overlap (Human vs Mouse)
+# This will render horizontally in your knitted document
+p1 <- plot_euler_horizontal(list(Human = bc_human, Mouse = bc_mouse), "Alignment Overlap")
+print(p1)
+
+# --- 5. Comparison with GEM Classification ---
+gem_path <- file.path(base_dir, "data", paste0(base_type, "_multi"), "outs", "per_sample_outs", paste0(base_type, "_multi"), "analysis", "gem_classification.csv")
+gem_classification <- read.csv(gem_path, stringsAsFactors = FALSE)
+
+target_calls <- c("GRCh38", "GRCm39", "Multiplet")
+comparison_plots <- list()
+
+for (cat_name in target_calls) {
+  x_bc <- xengsort_classification$barcode[xengsort_classification$call == cat_name]
+  g_bc <- gem_classification$barcode[gem_classification$call == cat_name]
+  
+  # Generate the plot for this category
+  comparison_plots[[cat_name]] <- plot_euler_horizontal(
+    list(Xengsort = x_bc, GEM = g_bc), 
+    paste("Category:", cat_name)
+  )
+}
+
+# To show them horizontally in one row in the knitted document:
+# grid.arrange works with eulerr objects because they are grid-based
+grid.arrange(grobs = comparison_plots, ncol = 3)
+```
+
+# Percent plots
+
+To visualize how the two multiplet-calling methods differ across the full
+range of sequencing depth, each barcode's total read count (`GRCh38` +
+`GRCm39` reads, from the GEM classification) and percent-mouse read
+fraction are plotted, with the multiplet barcodes called by each method
+(xengsort-based and CellRanger GEM-based) highlighted in red on otherwise
+identical background points. This shows whether the two methods flag
+multiplets in similar regions of the read-depth / species-mixture space, or
+whether one method is systematically more permissive or conservative.
+
+```{r fig.height=3, fig.width=12}
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+
+# --- 1. Data Preparation ---
+
+# Add totalReads and percentMouse to gem_classification
+gem_classification <- gem_classification %>%
+  mutate(
+    totalReads = GRCh38 + GRCm39,
+    percentMouse = (GRCm39 / totalReads) * 100
+  )
+
+# --- 2. Scatterplot Function ---
+
+plot_multiplet_highlight <- function(df, highlight_barcodes, title) {
+  # Create a temporary column for coloring
+  df_plot <- df %>%
+    mutate(status = ifelse(barcode %in% highlight_barcodes, "Highlight", "Background")) %>%
+    # Sort so highlighted points are plotted last (on top)
+    arrange(status) 
+  
+  ggplot(df_plot, aes(x = totalReads, y = percentMouse, color = status)) +
+    geom_point(alpha = 0.5, size = 1) +
+    scale_color_manual(values = c("Background" = "grey80", "Highlight" = "red")) +
+    # scale_x_log10() + # Log scale is better for UMI/Read counts
+    theme_minimal() +
+    labs(
+      title = title,
+      x = "Total Reads per Barcode (Log10)",
+      y = "% GRCm39 (Mouse) Reads",
+      color = "Classification"
+    ) +
+    theme(legend.position = "none")
+}
+
+# --- 3. Generate the Plots ---
+
+# Get multiplet barcodes from each method
+xengsort_multiplets <- xengsort_classification$barcode[xengsort_classification$call == "Multiplet"]
+gem_multiplets      <- gem_classification$barcode[gem_classification$call == "Multiplet"]
+
+# Create the two plots
+p_xeng <- plot_multiplet_highlight(
+  gem_classification, 
+  xengsort_multiplets, 
+  "Multiplets: Xengsort Method"
+)
+
+p_gem <- plot_multiplet_highlight(
+  gem_classification, 
+  gem_multiplets, 
+  "Multiplets: Cell Ranger (GEM)"
+)
+
+# Display side-by-side
+p_xeng + p_gem
+```
+
+# Ambiguous and Neither
+
+Xengsort also produces `ambiguous` (reads with support from both genomes)
+and `neither` (unclassifiable) read classes, which are separately aligned
+to the combined barnyard reference (see steps `03`-`06` of the xengsort
+pipeline in `README.md`). This section checks how the barcodes recovered
+from those two classes relate to the xengsort-based and CellRanger
+GEM-based classifications above, using Euler diagrams of barcode overlap.
+Each dataset is processed only if its output folder exists, since not every
+run generates a usable `ambiguous` or `neither` class.
+
+```{r}
+# Load libraries
+library(Seurat)
+library(tidyverse)
+library(eulerr)
+library(gridExtra)
+
+# Construct paths
+path_ambiguous <- file.path(base_dir, "data", paste0(base_type, "_ambiguous_multi"), "outs", "per_sample_outs", paste0(base_type, "_ambiguous_multi"), "sample_filtered_feature_bc_matrix")
+path_neither   <- file.path(base_dir, "data", paste0(base_type, "_neither_multi"), "outs", "per_sample_outs", paste0(base_type, "_neither_multi"), "sample_filtered_feature_bc_matrix")
+
+# Flags to track existence
+exists_ambig   <- dir.exists(path_ambiguous)
+exists_neither <- dir.exists(path_neither)
+
+# Helper function for eulerr plots
+plot_euler_overlap <- function(set_list, title) {
+  fit <- euler(set_list)
+  plot(fit, 
+       quantities = TRUE, 
+       fills = list(fill = c("#A6CEE3", "#B2DF8A"), alpha = 0.6),
+       edges = "black",
+       main = title)
+}
+
+# Initialize plot list and shared barcodes
+all_plots <- list()
+all_xengsort_bc <- xengsort_classification$barcode
+all_gem_bc      <- gem_classification$barcode
+
+# 1. Process Ambiguous if it exists
+if (exists_ambig) {
+  data_ambiguous <- Read10X(data.dir = path_ambiguous)
+  bc_ambiguous <- colnames(data_ambiguous)
+  cat("Number of barcodes in Ambiguous dataset:", length(bc_ambiguous), "\n")
+  
+  all_plots$ambig_xeng <- plot_euler_overlap(list(Ambiguous = bc_ambiguous, Xengsort = all_xengsort_bc), "Ambiguous vs. Xengsort")
+  all_plots$ambig_gem  <- plot_euler_overlap(list(Ambiguous = bc_ambiguous, GEM = all_gem_bc), "Ambiguous vs. GEM")
+}
+
+# 2. Process Neither if it exists
+if (exists_neither) {
+  data_neither <- Read10X(data.dir = path_neither)
+  bc_neither <- colnames(data_neither)
+  cat("Number of barcodes in Neither dataset:", length(bc_neither), "\n")
+  
+  all_plots$neither_xeng <- plot_euler_overlap(list(Neither = bc_neither, Xengsort = all_xengsort_bc), "Neither vs. Xengsort")
+  all_plots$neither_gem  <- plot_euler_overlap(list(Neither = bc_neither, GEM = all_gem_bc), "Neither vs. GEM")
+}
+
+# 3. Arrange plots only if any were created
+if (length(all_plots) > 0) {
+  grid.arrange(grobs = all_plots, 
+               ncol = 2, 
+               top = "Overlap Analysis: Ambiguous/Neither vs. Previous Classifications")
+} else {
+  cat("Skipping Overlap Analysis: Neither Ambiguous nor Neither datasets found.\n")
+}
+```
+
+# Counts
+
+Finally, basic properties of each count matrix (human-aligned,
+mouse-aligned, and, if present, ambiguous- and neither-aligned) are
+summarized: matrix dimensions, the proportion of zero entries, and the
+distribution of non-zero counts.
+
+```{r}
+# Function to analyze matrix properties
+analyze_matrix_stats <- function(mat, name) {
+  cat("\n--- Analysis for:", name, "---\n")
+  
+  dims <- dim(mat)
+  cat("Dimensions (Genes x Barcodes):", dims[1], "x", dims[2], "\n")
+  
+  total_elements <- as.numeric(dims[1]) * as.numeric(dims[2])
+  non_zeros <- length(mat@x)
+  prop_zeros <- (total_elements - non_zeros) / total_elements
+  cat("Proportion of zeros:", round(prop_zeros * 100, 2), "%\n")
+  
+  cat("Summary of non-zero count distribution:\n")
+  print(summary(mat@x))
+  
+  invisible(list(dims=dims, sparsity=prop_zeros, summary=summary(mat@x)))
+}
+
+# Always analyze Human and Mouse (assuming they exist from previous steps)
+analyze_matrix_stats(data_human, "Human-aligned")
+analyze_matrix_stats(data_mouse, "Mouse-aligned")
+
+# Conditionally analyze Ambiguous and Neither
+if (exists_ambig) {
+  analyze_matrix_stats(data_ambiguous, "Ambiguous")
+}
+
+if (exists_neither) {
+  analyze_matrix_stats(data_neither, "Neither")
+}
+```

@@ -65,7 +65,7 @@ do
         # -S 60G: Buffer size (matches 80G requested, leaving overhead)
         zcat "$gz_file" | \
         paste - - - - | \
-        sort -k1,1 -T "$TMP_DIR" --parallel=$SLURM_CPUS_PER_TASK -S 60G | \
+        sort -k1,1 -T "$TMP_DIR" --parallel=$SLURM_CPUS_PER_TASK -S 120G | \
         tr '\t' '\n' | \
         gzip > "sorted_$gz_file"
 

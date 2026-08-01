@@ -11,7 +11,9 @@
 
 # --- ONLY SETTING ---
 BASE_NAME="hgmm_12k" # "5k_hgmm_3p_nextgem"
-TYPES="ambiguous" # ( "graft" "host" "ambiguous" "neither" )
+# Run one type at a time (loop still works with a scalar); switch to the full
+# array ("graft" "host" "ambiguous" "neither") to process all four in one job.
+TYPES="ambiguous"
 
 # --- GLOBAL PATHS ---
 PROJECT_ROOT="/lustre/home/juicer/MultipletR.dev"

@@ -19,7 +19,7 @@ do
     # Define directory based on the naming from previous subset/sort steps
     # Note: Ensure this matches the OUTPUT_DIR used in your 03_subset.sh
     DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_classified_${TYPE}"
-    
+
     # Sample ID used inside Cell Ranger
     SAMPLE_ID="${BASE_NAME}_${TYPE}"
 
@@ -87,6 +87,14 @@ EOF
 
     echo "DONE: Config file created at ${DIR}/${CONFIG_NAME}"
 done
+
+# Check file integrity
+find . -type f -name "${BASE_NAME}_*_S1_L001_R[12]_001.fastq.gz" -print0 | while IFS= read -r -d '' file; do
+  if ! gzip -t "$file"; then
+    echo "Integrity check failed: $file"
+  fi
+done
+
 
 echo "--------------------------------------------------------"
 echo "All preparation steps complete for Graft and Host."
