@@ -48,7 +48,7 @@ The initial FASTQ files should be in a folder `${BASE_NAME}_fastqs`, where `${BA
 
 - `xengsort_07_cleanup.sh` - Removing intermediate files - raw, merged, classified/sorted FASTQs, thinning the Cellranger's multi folders to keep only the per sample output. Gzipping large files. Requires confirmation of each step. Non-SLURM, must be run interactively. (`xengsort_07_cleanup_slurm.sh` is the same logic made non-interactive/SLURM-batchable, e.g. for use on an HPC login-less cleanup job.)
 
-- `08_Xenocell_check.Rmd` - Final validation step: checks how well xengsort-based barcode classification (from separate graft/host CellRanger runs) agrees with CellRanger's own barnyard multiplet classification.
+- `xengsort_08_check.Rmd` - Final validation step: checks how well xengsort-based barcode classification (from separate graft/host CellRanger runs) agrees with CellRanger's own barnyard multiplet classification.
   - Input: per-sample `sample_filtered_feature_bc_matrix` output from the graft (`_graft_multi`) and host (`_host_multi`) CellRanger runs (steps `05`-`06`) - a barcode is called `GRCh38` if seen only in the graft matrix, `GRCm39` if seen only in the host matrix, and `Multiplet` if seen in both.
   - Input: `gem_classification.csv` from the full-data barnyard `cellranger multi` run (step `00`) - CellRanger's own per-barcode `call`.
   - Logic: compares the two classifications via Euler diagrams (overall, and per class `GRCh38`/`GRCm39`/`Multiplet`) and total-reads-vs-percent-mouse scatterplots highlighting multiplets from each method; extends the comparison to the `ambiguous`/`neither` xengsort classes if those CellRanger runs exist; reports basic count-matrix statistics (dimensions, sparsity, count distribution) for every dataset loaded.
