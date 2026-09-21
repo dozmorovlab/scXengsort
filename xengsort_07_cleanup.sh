@@ -1,12 +1,12 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=xengsort_config.sh
-source "${SCRIPT_DIR}/xengsort_config.sh"
-
+# --- CONFIGURATION ---
+BASE_NAME="hgmm_12k" # "5k_hgmm_3p_nextgem"
+PROJECT_ROOT="/lustre/home/juicer/MultipletR.dev"
 DELETE_ALL=false
+TYPES=( "graft" "host" "ambiguous" "neither" )
 
-cd "$PROJECT_ROOT"
+cd $PROJECT_ROOT
 
 # Function for interactive confirmation
 confirm_and_run() {
@@ -36,13 +36,13 @@ echo "Starting Cleanup for BASE_NAME: $BASE_NAME"
 echo "--------------------------------------------------------"
 
 # 1. Clean Raw FASTQs
-confirm_and_run "$FASTQ_DIR" "Raw FASTQ files" "rm -rf '$FASTQ_DIR' && echo 'Deleted raw fastqs.'"
+confirm_and_run "${BASE_NAME}_fastqs" "Raw FASTQ files" "rm -rf ${BASE_NAME}_fastqs && echo 'Deleted raw fastqs.'"
 
 # 1.1 Clean Merged FASTQs
-confirm_and_run "$MERGED_DIR" "Merged FASTQ files for xengsort" "rm -rf '$MERGED_DIR' && echo 'Deleted merged folder.'"
+confirm_and_run "${BASE_NAME}_merged" "Merged FASTQ files for xengsort" "rm -rf ${BASE_NAME}_merged && echo 'Deleted merged folder.'"
 
 # 2. Clean Xengsort-classified FASTQs
-confirm_and_run "$CLASSIFIED_DIR" "Xengsort-classified FASTQ files" "rm -rf '$CLASSIFIED_DIR' && echo 'Deleted classified folder.'"
+confirm_and_run "${BASE_NAME}_classified" "Xengsort-classified FASTQ files" "rm -rf ${BASE_NAME}_classified && echo 'Deleted classified folder.'"
 
 # 2.1 Thin out the Full Data Cell Ranger folder (The original unified run)
 FULL_OUT_DIR="${BASE_NAME}_multi"
@@ -67,8 +67,8 @@ if [ -d "$FULL_OUT_DIR" ]; then
 fi
 
 # 3. Process Graft and Host specific folders
-for TYPE in "${CLASSIFICATION_TYPES[@]}"; do
-    INT_DIR="$(classified_type_dir "$TYPE")"
+for TYPE in "${TYPES[@]}"; do
+    INT_DIR="${BASE_NAME}_classified_${TYPE}"
     CR_OUT_DIR="${BASE_NAME}_${TYPE}_multi"
 
     # Specific destination path: ID/outs/per_sample_outs/ID/
@@ -124,8 +124,9 @@ done
 echo "--------------------------------------------------------"
 echo "Moving log files..."
 echo "--------------------------------------------------------"
-mkdir -p "$LOG_DIR"
-mv *.out *.err "$LOG_DIR/" 2>/dev/null
+LOG_DIR=logs/${BASE_NAME}
+mkdir -p ${LOG_DIR}
+mv *.out *.err ${LOG_DIR}/ 2>/dev/null
 echo "Log files moved to ${LOG_DIR}"
 
 echo "--------------------------------------------------------"

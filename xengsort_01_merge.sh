@@ -9,23 +9,19 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=xengsort_config.sh
-source "${SCRIPT_DIR}/xengsort_config.sh"
+BASE_NAME="hgmm_12k" #  "5k_hgmm_3p_nextgem"
+IN_DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_fastqs"
+OUT_DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_merged"
 
-mkdir -p "$MERGED_DIR"
+mkdir -p $OUT_DIR
 
 echo "Merging R1..."
-cat "${FASTQ_DIR}"/*_R1_*.fastq.gz > "${MERGED_DIR}/merged_R1.fastq.gz"
+cat ${IN_DIR}/*_R1_*.fastq.gz > ${OUT_DIR}/merged_R1.fastq.gz
 echo "Merging R2..."
-cat "${FASTQ_DIR}"/*_R2_*.fastq.gz > "${MERGED_DIR}/merged_R2.fastq.gz"
+cat ${IN_DIR}/*_R2_*.fastq.gz > ${OUT_DIR}/merged_R2.fastq.gz
 echo "Merging I1..."
-cat "${FASTQ_DIR}"/*_I1_*.fastq.gz > "${MERGED_DIR}/merged_I1.fastq.gz"
-if compgen -G "${FASTQ_DIR}/*_I2_*.fastq.gz" > /dev/null; then
-    echo "Merging I2..."
-    cat "${FASTQ_DIR}"/*_I2_*.fastq.gz > "${MERGED_DIR}/merged_I2.fastq.gz"
-else
-    echo "No I2 FASTQs found; continuing with single-index data."
-fi
+cat ${IN_DIR}/*_I1_*.fastq.gz > ${OUT_DIR}/merged_I1.fastq.gz
+echo "Merging I2..."
+cat ${IN_DIR}/*_I2_*.fastq.gz > ${OUT_DIR}/merged_I2.fastq.gz
 
 echo "Merge complete."
