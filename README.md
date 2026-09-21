@@ -11,7 +11,9 @@ regenerates CellRanger-compatible FASTQs for each class, and quantifies
 them separately with `cellranger multi`. A companion "barnyard" run
 (combined human+mouse reference, no xengsort) is used as an independent
 ground truth to check how well xengsort-based read classification agrees
-with CellRanger's own per-barcode multiplet (doublet) calls.
+with CellRanger's own per-barcode multiplet (doublet) calls. See the 
+[manual](https://github.com/dozmorovlab/scXengsort/tree/manual) branch for 
+the manually developed scripts.
 
 The initial FASTQ files should be in a folder `${BASE_NAME}_fastqs`, where `${BASE_NAME}` is the unique identifier for the dataset. It will be used to name the following folders.
 
