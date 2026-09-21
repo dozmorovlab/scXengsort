@@ -9,11 +9,20 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=xengsort_config.sh
-source "${SCRIPT_DIR}/xengsort_config.sh"
+# --- CONFIGURATION ---
+BASE_NAME="hgmm_12k" #  "5k_hgmm_3p_nextgem"
+PROJECT_ROOT="/lustre/home/juicer/MultipletR.dev"
+CELLRANGER_BIN="${PROJECT_ROOT}/cellranger-10.0.0/bin/cellranger"
 
-cd "$PROJECT_ROOT"
+# Paths
+FASTQ_DIR="${PROJECT_ROOT}/${BASE_NAME}_fastqs"
+CONFIG_FILE="${PROJECT_ROOT}/${BASE_NAME}_full_multi_config.csv"
+OUTPUT_ID="${BASE_NAME}_multi"
+
+# Reference (Mixed Barnyard)
+REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCh38_and_GRCm39-2024-A"
+
+cd $PROJECT_ROOT
 
 echo "--------------------------------------------------------"
 echo "Aggregating all lanes and libraries for: $BASE_NAME"
@@ -22,9 +31,9 @@ echo "--------------------------------------------------------"
 # 1. Generate the multi config file
 echo "[1/2] Generating configuration file..."
 
-cat <<EOF > "$FULL_MULTI_CONFIG"
+cat <<EOF > "$CONFIG_FILE"
 [gene-expression]
-reference,${MIXED_REFERENCE}
+reference,${REF}
 create-bam,false
 
 [libraries]
@@ -38,20 +47,20 @@ SAMPLE_IDS=$(ls ${FASTQ_DIR}/*.fastq.gz | xargs -n 1 basename | sed 's/_S[0-9].*
 for ID in $SAMPLE_IDS; do
     echo "Adding $ID to unified sample pool..."
     # 'any' tells Cell Ranger to find all lanes (L001, L002, L003, L004) for this ID
-    echo "${ID},${FASTQ_DIR},any,Gene Expression" >> "$FULL_MULTI_CONFIG"
+    echo "${ID},${FASTQ_DIR},any,Gene Expression" >> "$CONFIG_FILE"
 done
 
 # 2. Run Cell Ranger Multi
 echo "[2/2] Launching Cell Ranger Multi..."
 
 # Clean up existing run folder if necessary
-if [ -d "$FULL_MULTI_OUTPUT" ]; then
-    echo "Removing existing output folder $FULL_MULTI_OUTPUT"
-    rm -rf "$FULL_MULTI_OUTPUT"
+if [ -d "$OUTPUT_ID" ]; then
+    echo "Removing existing output folder $OUTPUT_ID"
+    rm -rf "$OUTPUT_ID"
 fi
 
-"$CELLRANGER_BIN" multi --id="$FULL_MULTI_OUTPUT" \
-                      --csv="$FULL_MULTI_CONFIG" \
+$CELLRANGER_BIN multi --id="$OUTPUT_ID" \
+                      --csv="$CONFIG_FILE" \
                       --localcores=$SLURM_CPUS_PER_TASK \
                       --localmem=$((SLURM_MEM_PER_NODE / 1024))
 
@@ -59,11 +68,11 @@ fi
 
 
 echo "--------------------------------------------------------"
-echo "Moving configuration file $(basename "${FULL_MULTI_CONFIG}") to ${FULL_MULTI_OUTPUT}"
+echo "Moving configuration file $(basename "${CONFIG_FILE}") to ${OUTPUT_ID}"
 echo "--------------------------------------------------------"
 
 # Using quotes to handle spaces and the -v flag to confirm the move in logs
-mv "${FULL_MULTI_CONFIG}" "${FULL_MULTI_OUTPUT}/"
+mv "${CONFIG_FILE}" "${OUTPUT_ID}/"
 
 echo "--------------------------------------------------------"
 echo "Unified Full Data Analysis Complete."
