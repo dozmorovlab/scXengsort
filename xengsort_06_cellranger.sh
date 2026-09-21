@@ -9,24 +9,18 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 
-# --- ONLY SETTING ---
-BASE_NAME="hgmm_12k" # "5k_hgmm_3p_nextgem"
-# Run one type at a time (loop still works with a scalar); switch to the full
-# array ("graft" "host" "ambiguous" "neither") to process all four in one job.
-TYPES="ambiguous"
-
-# --- GLOBAL PATHS ---
-PROJECT_ROOT="/lustre/home/juicer/MultipletR.dev"
-CELLRANGER_BIN="${PROJECT_ROOT}/cellranger-10.0.0/bin/cellranger"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=xengsort_config.sh
+source "${SCRIPT_DIR}/xengsort_config.sh"
 
 # Navigate to project root so the output folders are created there
-cd $PROJECT_ROOT
+cd "$PROJECT_ROOT"
 
 # --- PROCESSING LOOP ---
-for TYPE in "${TYPES[@]}"
+for TYPE in "${CLASSIFICATION_TYPES[@]}"
 do
     # 1. Define dynamic paths (matching your 05_prepare.sh output)
-    DATA_DIR="${PROJECT_ROOT}/${BASE_NAME}_classified_${TYPE}"
+    DATA_DIR="$(classified_type_dir "$TYPE")"
     CONFIG_FILE="${DATA_DIR}/${BASE_NAME}_multi_config_${TYPE}.csv"
     OUTPUT_NAME="${BASE_NAME}_${TYPE}_multi"
 
@@ -51,9 +45,9 @@ do
 
     # 4. Run Cell Ranger Multi
     # --localmem is converted from MB (SLURM default) to GB
-    $CELLRANGER_BIN multi --id=$OUTPUT_NAME \
-                          --csv=$CONFIG_FILE \
-                          --localcores=$SLURM_CPUS_PER_TASK \
+"$CELLRANGER_BIN" multi --id="$OUTPUT_NAME" \
+                          --csv="$CONFIG_FILE" \
+                          --localcores="$SLURM_CPUS_PER_TASK" \
                           --localmem=$((SLURM_MEM_PER_NODE / 1024))
 
     echo "--------------------------------------------------------"

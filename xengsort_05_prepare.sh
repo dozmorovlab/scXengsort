@@ -9,16 +9,16 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 
-# --- ONLY SETTING ---
-BASE_NAME="hgmm_12k" # "5k_hgmm_3p_nextgem"
-TYPES=("graft" "host" "ambiguous" "neither")
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=xengsort_config.sh
+source "${SCRIPT_DIR}/xengsort_config.sh"
 
 # --- PROCESSING LOOP ---
-for TYPE in "${TYPES[@]}"
+for TYPE in "${CLASSIFICATION_TYPES[@]}"
 do
     # Define directory based on the naming from previous subset/sort steps
     # Note: Ensure this matches the OUTPUT_DIR used in your 03_subset.sh
-    DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_classified_${TYPE}"
+    DIR="$(classified_type_dir "$TYPE")"
 
     # Sample ID used inside Cell Ranger
     SAMPLE_ID="${BASE_NAME}_${TYPE}"
@@ -33,24 +33,7 @@ do
         continue
     fi
 
-    # Determine Reference and Config Filename based on TYPE
-#    if [ "$TYPE" == "graft" ]; then
-#        REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCh38-2024-A"
-#    else
-#        REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCm39-2024-A"
-#    fi
-    case "$TYPE" in
-        "graft")
-            REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCh38-2024-A"
-            ;;
-        "host")
-            REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCm39-2024-A"
-            ;;
-        *)
-            # The "*" acts as a catch-all for "ambiguous", "neither", or anything else
-            REF="/lustre/home/juicer/ExtData/10x/refdata-gex-GRCh38_and_GRCm39-2024-A"
-            ;;
-    esac
+    REF="$(cellranger_reference_for_type "$TYPE")"
 
     # Unified config naming
     CONFIG_NAME="${BASE_NAME}_multi_config_${TYPE}.csv"
@@ -66,7 +49,11 @@ do
         mv "sorted_${BASE_NAME}_classified-${TYPE}.1.fq.gz"  "${SAMPLE_ID}_S1_L001_R1_001.fastq.gz"
         mv "sorted_${BASE_NAME}_classified-${TYPE}.2.fq.gz"  "${SAMPLE_ID}_S1_L001_R2_001.fastq.gz"
         mv "sorted_${BASE_NAME}_classified-${TYPE}.I1.fq.gz" "${SAMPLE_ID}_S1_L001_I1_001.fastq.gz"
-        mv "sorted_${BASE_NAME}_classified-${TYPE}.I2.fq.gz" "${SAMPLE_ID}_S1_L001_I2_001.fastq.gz"
+        if [ -f "sorted_${BASE_NAME}_classified-${TYPE}.I2.fq.gz" ]; then
+            mv "sorted_${BASE_NAME}_classified-${TYPE}.I2.fq.gz" "${SAMPLE_ID}_S1_L001_I2_001.fastq.gz"
+        else
+            echo "[INFO] No sorted I2 FASTQ found; preparing single-index data."
+        fi
         echo "Check: Filenames updated to Cell Ranger format."
     else
         echo "[WARNING] Sorted files not found in $DIR. They may have already been renamed."
