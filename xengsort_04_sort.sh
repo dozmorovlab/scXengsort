@@ -9,15 +9,15 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 
-# --- ONLY SETTING ---
-BASE_NAME="hgmm_12k" #  "5k_hgmm_3p_nextgem"
-TYPES=( "graft" "host" "ambiguous" "neither" )
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=xengsort_config.sh
+source "${SCRIPT_DIR}/xengsort_config.sh"
 
 # --- PROCESSING LOOP ---
-for TYPE in "${TYPES[@]}"
+for TYPE in "${CLASSIFICATION_TYPES[@]}"
 do
     # Re-evaluate paths for each type
-    DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_classified_${TYPE}"
+    DIR="$(classified_type_dir "$TYPE")"
     TMP_DIR="${DIR}/sort_tmp"
     ID_FILE="${DIR}/${TYPE}_ids.txt"
 
@@ -34,13 +34,18 @@ do
     mkdir -p "$TMP_DIR"
     cd "$DIR"
 
-    # Define the 4 files based on the classification naming convention
+    # Define required read and I1 files based on the classification naming convention.
     FILES=(
         "${BASE_NAME}_classified-${TYPE}.1.fq.gz"
         "${BASE_NAME}_classified-${TYPE}.2.fq.gz"
         "${BASE_NAME}_classified-${TYPE}.I1.fq.gz"
-        "${BASE_NAME}_classified-${TYPE}.I2.fq.gz"
     )
+    I2_FILE="${BASE_NAME}_classified-${TYPE}.I2.fq.gz"
+    if [ -f "$I2_FILE" ]; then
+        FILES+=("$I2_FILE")
+    else
+        echo "[INFO] No I2 FASTQ found; sorting single-index data."
+    fi
 
     # 1. Count IDs in the reference list
     if [ -f "$ID_FILE" ]; then

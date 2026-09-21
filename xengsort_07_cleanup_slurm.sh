@@ -9,11 +9,11 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
 
-# --- CONFIGURATION ---
-BASE_NAME="VCU-PC-067_1823" # "VCU-PC-065_1815" #  "hgmm_6k" # "10k_hgmm_3p_gemx" "VCU-CO-063_1805" #  "VCU-BC-074_1929" #  "VCU-BC-043_110216" #  "VCU-BC-037_110509"
-PROJECT_ROOT="/lustre/home/juicer/MultipletR.dev"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=xengsort_config.sh
+source "${SCRIPT_DIR}/xengsort_config.sh"
+
 # DELETE_ALL is effectively true by default in this non-interactive script
-TYPES=( "graft" "host" "ambiguous" "neither" )
 
 # Ensure we are in the correct directory
 cd "$PROJECT_ROOT" || { echo "Error: Could not change to $PROJECT_ROOT"; exit 1; }
@@ -43,10 +43,10 @@ echo "--------------------------------------------------------"
 # run_step "${BASE_NAME}_fastqs" "Raw FASTQ files" "rm -rf ${BASE_NAME}_fastqs && echo 'Deleted raw fastqs.'"
 
 # 1.1 Clean Merged FASTQs
-run_step "${BASE_NAME}_merged" "Merged FASTQ files for xengsort" "rm -rf ${BASE_NAME}_merged && echo 'Deleted merged fastqs.'"
+run_step "$MERGED_DIR" "Merged FASTQ files for xengsort" "rm -rf '$MERGED_DIR' && echo 'Deleted merged fastqs.'"
 
 # 2. Clean Xengsort-classified FASTQs
-run_step "${BASE_NAME}_classified" "Xengsort-classified FASTQ files" "rm -rf ${BASE_NAME}_classified && echo 'Deleted classified fastqs.'"
+run_step "$CLASSIFIED_DIR" "Xengsort-classified FASTQ files" "rm -rf '$CLASSIFIED_DIR' && echo 'Deleted classified fastqs.'"
 
 # 2.1 Thin out the Full Data Cell Ranger folder (The original unified run)
 FULL_OUT_DIR="${BASE_NAME}_multi"
@@ -75,8 +75,8 @@ else
 fi
 
 # 3. Process Graft and Host specific folders
-for TYPE in "${TYPES[@]}"; do
-    INT_DIR="${BASE_NAME}_classified_${TYPE}"
+for TYPE in "${CLASSIFICATION_TYPES[@]}"; do
+    INT_DIR="$(classified_type_dir "$TYPE")"
     CR_OUT_DIR="${BASE_NAME}_${TYPE}_multi"
 
     # Specific destination path: ID/outs/per_sample_outs/ID/
@@ -135,10 +135,9 @@ done
 echo "--------------------------------------------------------"
 echo "Moving log files..."
 echo "--------------------------------------------------------"
-LOG_DIR="logs/${BASE_NAME}"
 mkdir -p "${LOG_DIR}"
 
-# Note: Moving the current job's .out/.err file while it is running 
+# Note: Moving the current job's .out/.err file while it is running
 # is usually fine, but the very last lines of echo might not appear in the moved file.
 # We sleep briefly to ensure file handle stability.
 sleep 2

@@ -15,20 +15,19 @@ conda activate xengsort
 module load htslib
 module load samtools
 
-BASE_NAME="hgmm_12k" #  "5k_hgmm_3p_nextgem"
-DATA_DIR="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_merged"
-INDEX="/lustre/home/juicer/ExtData/xengsort_refs/myindex" # Path to index created earlier
-OUT_PREFIX="/lustre/home/juicer/MultipletR.dev/${BASE_NAME}_classified"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=xengsort_config.sh
+source "${SCRIPT_DIR}/xengsort_config.sh"
 
-mkdir -p ${OUT_PREFIX}
+mkdir -p "$CLASSIFIED_DIR"
 
 xengsort classify \
-  --index $INDEX \
-  -q ${DATA_DIR}/merged_R1.fastq.gz \
-  -p ${DATA_DIR}/merged_R2.fastq.gz \
-  -o $OUT_PREFIX \
-  -T 32 \
+  --index "$XENGSORT_INDEX" \
+  -q "${MERGED_DIR}/merged_R1.fastq.gz" \
+  -p "${MERGED_DIR}/merged_R2.fastq.gz" \
+  -o "$CLASSIFIED_DIR" \
+  -T "$SLURM_CPUS_PER_TASK" \
   --progress
 #  --compression gz 
 
-mv ${OUT_PREFIX}*.fq.gz ${OUT_PREFIX}/
+mv "${CLASSIFIED_DIR}"*.fq.gz "$CLASSIFIED_DIR/"
